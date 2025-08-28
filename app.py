@@ -1,38 +1,26 @@
-# app.py
-import os
-import tempfile
 import gradio as gr
-import excel_summary_script as ess
+from excel_summary_script import build_summary_table
 
-def process_uploaded(file_obj):
-    if not file_obj:
-        return None, "⚠️ Сначала выберите .xlsx"
-    try:
-        wb = ess.build_summary_table(file_obj.name)
-        fd, out_path = tempfile.mkstemp(suffix=".xlsx")
-        os.close(fd)
-        wb.save(out_path)
-        return out_path, "✅ Готово! Скачайте итоговый файл."
-    except Exception as e:
-        return None, f"❌ Ошибка: {e}"
+def process_file(file):
+    if file is None:
+        return None
+    # Формируем сводный файл
+    summary_wb = build_summary_table(file.name)
+    output_path = "summary_output.xlsx"
+    summary_wb.save(output_path)
+    return output_path
 
-CSS = """
-.gradio-container {max-width: 820px !important; margin: 0 auto !important;}
-/* делаем элементы компактными и убираем любые растягивания */
-#wrap {padding-top: 12px;}
-"""
+with gr.Blocks() as demo:
+    gr.Markdown("## 📊 Сравнитель КП")
+    gr.Markdown("Загрузите Excel-файл и получите сводный отчёт")
 
-with gr.Blocks(css=CSS, title="Comparison — свод КП") as demo:
-    gr.Markdown("## 📊 Свод КП\nНажмите кнопку ниже и выберите Excel (.xlsx).")
+    with gr.Row():
+        input_file = gr.File(label="Загрузите Excel (.xlsx)", file_types=[".xlsx"], type="file")
+        output_file = gr.File(label="Скачать результат", type="file")
 
-    with gr.Column(elem_id="wrap"):
-        # ВАЖНО: используем UploadButton вместо File — никакой большой дроп-зоны
-        upload = gr.UploadButton("📁 Загрузить .xlsx", file_types=[".xlsx"], file_count="single")
-        file_out = gr.File(label="Скачать результат", interactive=False)
-        status = gr.Textbox(label="Статус", interactive=False, lines=2)
+    run_btn = gr.Button("Сформировать свод")
 
-    # Обрабатываем сразу после выбора файла
-    upload.upload(process_uploaded, inputs=upload, outputs=[file_out, status])
+    run_btn.click(fn=process_file, inputs=input_file, outputs=output_file)
 
 if __name__ == "__main__":
     demo.launch()
