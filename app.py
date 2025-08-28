@@ -7,7 +7,7 @@ from excel_summary_script import build_summary_table
 
 # ---------- helpers ----------
 def _path_from(file_obj):
-    """Аккуратно достаём путь к временному файлу из UploadButton (учитываем v4)."""
+    """Достаём путь к временному файлу из UploadButton (учитываем dict/obj/list в v4)."""
     if not file_obj:
         return None
     if isinstance(file_obj, (list, tuple)) and file_obj:
@@ -18,20 +18,13 @@ def _path_from(file_obj):
 
 # ---------- handlers ----------
 def keep_file(file_obj):
-    """Сохраняем выбранный файл и показываем имя."""
     path = _path_from(file_obj)
     if not path:
         return None, "Файл не выбран"
     return file_obj, f"Файл: **{os.path.basename(path)}**"
 
 def make_summary(file_obj):
-    """
-    Формируем свод.
-    Возвращаем:
-      - download для результата (видимый/скрытый),
-      - статус,
-      - детальный лог (строкой).
-    """
+    """Формируем свод и возвращаем (download, статус, лог)."""
     log = []
     try:
         log.append(f"[info] incoming object type: {type(file_obj)}")
@@ -77,11 +70,9 @@ with gr.Blocks(css=CSS, title="Свод КП") as demo:
     status = gr.Textbox(label="Статус", lines=2, interactive=False)
 
     with gr.Accordion("Показать отладочный лог", open=False):
-        debug_log = gr.Code(language="text", interactive=False, lines=14)
+        debug_log = gr.Textbox(label="", lines=14, interactive=False)
 
-    # 1) сохранить выбранный файл и показать имя
     choose_btn.upload(fn=keep_file, inputs=choose_btn, outputs=[file_state, file_info])
-    # 2) формирование свода + вывод лога в UI
     run_btn.click(fn=make_summary, inputs=file_state, outputs=[download_btn, status, debug_log])
 
 if __name__ == "__main__":
