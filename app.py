@@ -2,9 +2,9 @@
 import os
 import tempfile
 import gradio as gr
-import excel_summary_script as ess  # ваш модуль
+import excel_summary_script as ess
 
-def run(file_obj):
+def process_uploaded(file_obj):
     if not file_obj:
         return None, "⚠️ Сначала выберите .xlsx"
     try:
@@ -12,31 +12,27 @@ def run(file_obj):
         fd, out_path = tempfile.mkstemp(suffix=".xlsx")
         os.close(fd)
         wb.save(out_path)
-        return out_path, "✅ Готово! Нажмите на файл выше, чтобы скачать."
+        return out_path, "✅ Готово! Скачайте итоговый файл."
     except Exception as e:
         return None, f"❌ Ошибка: {e}"
 
 CSS = """
-.gradio-container {max-width: 900px !important; margin: 0 auto !important;}
-#upload-col {min-width: 420px;}
+.gradio-container {max-width: 820px !important; margin: 0 auto !important;}
+/* делаем элементы компактными и убираем любые растягивания */
+#wrap {padding-top: 12px;}
 """
 
-with gr.Blocks(css=CSS) as demo:
-    gr.Markdown("## 📊 Свод КП\nЗагрузите Excel (.xlsx) и нажмите **Собрать свод**.")
-    with gr.Row():
-        with gr.Column(elem_id="upload-col"):
-            file_in = gr.File(
-                label="Загрузите Excel (.xlsx)",
-                file_types=[".xlsx"],
-                type="filepath",
-                height=200
-            )
-            btn = gr.Button("Собрать свод", variant="primary")
-        with gr.Column():
-            file_out = gr.File(label="Скачать результат")
-            status = gr.Textbox(label="Статус", interactive=False, lines=2)
+with gr.Blocks(css=CSS, title="Comparison — свод КП") as demo:
+    gr.Markdown("## 📊 Свод КП\nНажмите кнопку ниже и выберите Excel (.xlsx).")
 
-    btn.click(run, inputs=file_in, outputs=[file_out, status])
+    with gr.Column(elem_id="wrap"):
+        # ВАЖНО: используем UploadButton вместо File — никакой большой дроп-зоны
+        upload = gr.UploadButton("📁 Загрузить .xlsx", file_types=[".xlsx"], file_count="single")
+        file_out = gr.File(label="Скачать результат", interactive=False)
+        status = gr.Textbox(label="Статус", interactive=False, lines=2)
+
+    # Обрабатываем сразу после выбора файла
+    upload.upload(process_uploaded, inputs=upload, outputs=[file_out, status])
 
 if __name__ == "__main__":
     demo.launch()
