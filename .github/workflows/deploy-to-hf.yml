@@ -17,15 +17,30 @@ jobs:
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      # Пушим содержимое этого репо прямо в репозиторий Space
+      - name: Show env
+        run: |
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Repo:   $GITHUB_REPOSITORY"
+
+      # === Диагностика: проверим доступ к репозиторию Space ===
+      - name: Check access to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: "HomeOrganization/Comparison"   # проверьте точность пути!
+        run: |
+          set -x
+          git ls-remote "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
+
+      # === Если доступ есть — пушим код ===
       - name: Push to Hugging Face Space (git remote)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}         # секрет в GitHub: Settings → Secrets → Actions
-          HF_SPACE: "HomeOrganization/Comparison"   # путь к вашему Space
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: "HomeOrganization/Comparison"
         run: |
           set -e
           git remote add hf "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git" \
             || git remote set-url hf "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
+          # если Space пустой/с историей — обе ситуации ок
           git fetch hf || true
           git checkout -B main
           git push -f hf main:main
