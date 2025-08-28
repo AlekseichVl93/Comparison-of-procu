@@ -1,19 +1,13 @@
 # app.py
 import os
-import sys
 import tempfile
 import traceback
 import gradio as gr
 from excel_summary_script import build_summary_table
 
-# ---------- перенаправляем stdout/stderr в файл ----------
-sys.stdout = open("log.txt", "w")
-sys.stderr = sys.stdout
-
-
 # ---------- helpers ----------
 def _path_from(file_obj):
-    """Достаём путь к временному файлу (Gradio v4 может отдавать объект/dict/список)."""
+    """Аккуратно достаём путь к временному файлу из UploadButton (учитываем v4)."""
     if not file_obj:
         return None
     if isinstance(file_obj, (list, tuple)) and file_obj:
@@ -22,37 +16,45 @@ def _path_from(file_obj):
         return file_obj.get("path") or file_obj.get("name")
     return getattr(file_obj, "path", None) or getattr(file_obj, "name", None)
 
-
 # ---------- handlers ----------
 def keep_file(file_obj):
-    """Сохраняем выбранный файл в state и показываем имя."""
+    """Сохраняем выбранный файл и показываем имя."""
     path = _path_from(file_obj)
     if not path:
-        print("[warn] файл не выбран")
         return None, "Файл не выбран"
-    print(f"[ok] выбран файл: {path}")
     return file_obj, f"Файл: **{os.path.basename(path)}**"
 
 def make_summary(file_obj):
-    """Формируем свод и возвращаем (кнопка скачивания, статус)."""
-    path = _path_from(file_obj)
-    print(f"[info] запускаем свод для: {path}")
-
-    if not path:
-        return gr.update(visible=False), "⚠️ Сначала выберите .xlsx"
-
+    """
+    Формируем свод.
+    Возвращаем:
+      - download для результата (видимый/скрытый),
+      - статус,
+      - детальный лог (строкой).
+    """
+    log = []
     try:
+        log.append(f"[info] incoming object type: {type(file_obj)}")
+        path = _path_from(file_obj)
+        log.append(f"[info] extracted path: {path}")
+
+        if not path:
+            log.append("[warn] path empty -> user did not select a file")
+            return gr.update(visible=False, value=None), "⚠️ Сначала выберите .xlsx", "\n".join(log)
+
+        log.append("[info] calling build_summary_table(...)")
         wb = build_summary_table(path)
+
         fd, out_path = tempfile.mkstemp(suffix=".xlsx")
         os.close(fd)
         wb.save(out_path)
-        print(f"[ok] итоговый файл сохранён: {out_path}")
-        return gr.update(visible=True, value=out_path), "✅ Готово! Скачайте результат."
+        log.append(f"[ok] summary saved to: {out_path}")
+
+        return gr.update(visible=True, value=out_path), "✅ Готово! Скачайте результат.", "\n".join(log)
     except Exception as e:
         tb = traceback.format_exc()
-        print(f"[ERR] {tb}")
-        return gr.update(visible=False), f"❌ Ошибка: {e}"
-
+        log.append("[err] exception:\n" + tb)
+        return gr.update(visible=False, value=None), f"❌ Ошибка: {e}", "\n".join(log)
 
 # ---------- UI ----------
 CSS = """
@@ -65,7 +67,7 @@ with gr.Blocks(css=CSS, title="Свод КП") as demo:
 
     file_state = gr.State(None)
 
-    # две кнопки
+    # РОВНО ДВЕ КНОПКИ
     with gr.Row(elem_id="controls"):
         choose_btn = gr.UploadButton("📁 Выбрать файл (.xlsx)", file_types=[".xlsx"], file_count="single")
         run_btn = gr.Button("🚀 Сформировать свод", variant="primary")
@@ -74,9 +76,13 @@ with gr.Blocks(css=CSS, title="Свод КП") as demo:
     download_btn = gr.DownloadButton("⬇️ Скачать результат", visible=False)
     status = gr.Textbox(label="Статус", lines=2, interactive=False)
 
-    choose_btn.upload(fn=keep_file, inputs=choose_btn, outputs=[file_state, file_info])
-    run_btn.click(fn=make_summary, inputs=file_state, outputs=[download_btn, status])
+    with gr.Accordion("Показать отладочный лог", open=False):
+        debug_log = gr.Code(language="text", interactive=False, lines=14)
 
+    # 1) сохранить выбранный файл и показать имя
+    choose_btn.upload(fn=keep_file, inputs=choose_btn, outputs=[file_state, file_info])
+    # 2) формирование свода + вывод лога в UI
+    run_btn.click(fn=make_summary, inputs=file_state, outputs=[download_btn, status, debug_log])
 
 if __name__ == "__main__":
     demo.launch()
