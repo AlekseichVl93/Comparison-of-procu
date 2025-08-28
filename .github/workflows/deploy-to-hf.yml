@@ -9,8 +9,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (full history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # <-- важно: не шallow-репо
 
       - name: Configure git identity
         run: |
@@ -22,16 +24,21 @@ jobs:
           echo "Branch: $GITHUB_REF_NAME"
           echo "Repo:   $GITHUB_REPOSITORY"
 
-      # === Диагностика: проверим доступ к репозиторию Space ===
+      # (опционально) инициализируем git-lfs, чтобы не ругались хуки на стороне HF
+      - name: Init Git LFS
+        run: |
+          git lfs install
+
+      # Диагностика доступа — оставим, полезно
       - name: Check access to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE: "HomeOrganization/Comparison"   # проверьте точность пути!
+          HF_SPACE: "HomeOrganization/Comparison"
         run: |
           set -x
           git ls-remote "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
 
-      # === Если доступ есть — пушим код ===
+      # Пушим код в репозиторий Space как во второй remote
       - name: Push to Hugging Face Space (git remote)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -40,7 +47,6 @@ jobs:
           set -e
           git remote add hf "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git" \
             || git remote set-url hf "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}.git"
-          # если Space пустой/с историей — обе ситуации ок
           git fetch hf || true
           git checkout -B main
           git push -f hf main:main
