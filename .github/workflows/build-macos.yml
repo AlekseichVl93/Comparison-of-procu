@@ -18,6 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Create venv and install dependencies
+        shell: bash
         run: |
           python3 -m venv venv
           source venv/bin/activate
@@ -27,18 +28,18 @@ jobs:
           fi
           pip install pyinstaller
 
-      - name: import gradio_client, os
-          p = os.path.join(os.path.dirname(gradio_client.__file__), "types.json")
-          print(p if os.path.exists(p) else "")
-          PY
-          )
-
       - name: Locate gradio_client types.json and expose path
+        shell: bash
         run: |
           source venv/bin/activate
-          # Найдём путь к types.json в установленном пакете gradio_client (если он есть)
-          TYPES_JSON=$(python3 - <<'PY'
-
+          # Находим абсолютный путь к types.json (если файл существует)
+          TYPES_JSON=$(python3 -c "import importlib, os, sys
+try:
+  m = importlib.import_module('gradio_client')
+  p = os.path.join(os.path.dirname(m.__file__), 'types.json')
+  print(p if os.path.exists(p) else '')
+except Exception:
+  print('')")
           echo "TYPES_JSON=${TYPES_JSON}" >> $GITHUB_ENV
           echo "Found types.json at: ${TYPES_JSON}"
 
@@ -47,34 +48,29 @@ jobs:
         run: |
           source venv/bin/activate
 
-          # По умолчанию добавляем collect-all для ключевых пакетов
           COLLECT_ARGS="--collect-all gradio --collect-all gradio_client --collect-all safehttpx --collect-all groovy --collect-all flask"
 
-          ADD_DATA_ARG=""
           if [ -n "${TYPES_JSON}" ]; then
-            echo "Will add explicit types.json: ${TYPES_JSON}"
-            # Для macOS/Unix разделитель в --add-data = ':'
-            ADD_DATA_ARG="--add-data \"${TYPES_JSON}:gradio_client\""
-          fi
-
-          # Сформируем команду
-          if [ -n "$ADD_DATA_ARG" ]; then
-            eval pyinstaller --onefile --name MyApp $COLLECT_ARGS $ADD_DATA_ARG app.py
+            echo "Including explicit types.json: ${TYPES_JSON}"
+            # для macOS/Linux разделитель в --add-data = ':'
+            pyinstaller --onefile --name MyApp $COLLECT_ARGS --add-data "${TYPES_JSON}:gradio_client" app.py
           else
-            eval pyinstaller --onefile --name MyApp $COLLECT_ARGS app.py
+            echo "types.json not found; proceeding without explicit add-data"
+            pyinstaller --onefile --name MyApp $COLLECT_ARGS app.py
           fi
 
       - name: Show dist contents
+        shell: bash
         run: |
           echo "dist content:"
           ls -la dist || true
 
       - name: Archive and upload artifact
+        shell: bash
         run: |
           mkdir -p release
           cd dist || exit 0
           zip -r ../release/MyApp-macos.zip . || true
-        shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
