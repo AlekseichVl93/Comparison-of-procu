@@ -27,16 +27,18 @@ jobs:
           fi
           pip install pyinstaller
 
+      - name: import gradio_client, os
+          p = os.path.join(os.path.dirname(gradio_client.__file__), "types.json")
+          print(p if os.path.exists(p) else "")
+          PY
+          )
+
       - name: Locate gradio_client types.json and expose path
         run: |
           source venv/bin/activate
           # Найдём путь к types.json в установленном пакете gradio_client (если он есть)
           TYPES_JSON=$(python3 - <<'PY'
-import gradio_client, os
-p = os.path.join(os.path.dirname(gradio_client.__file__), "types.json")
-print(p if os.path.exists(p) else "")
-PY
-)
+
           echo "TYPES_JSON=${TYPES_JSON}" >> $GITHUB_ENV
           echo "Found types.json at: ${TYPES_JSON}"
 
