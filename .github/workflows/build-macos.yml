@@ -1,4 +1,4 @@
-name: Build macOS App (PyInstaller)
+name: Build macOS App (PyInstaller - simple)
 
 on:
   workflow_dispatch:
@@ -6,13 +6,14 @@ on:
     branches: [ main ]
 
 jobs:
-  build-macos:
+  build:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
@@ -28,51 +29,32 @@ jobs:
           fi
           pip install pyinstaller
 
-      - name: Locate gradio_client types.json and expose path
+      - name: Build with PyInstaller (collect-all for known packages)
         shell: bash
         run: |
           source venv/bin/activate
-          # Однострочный вызов python, результат в переменной TYPES_JSON
-          TYPES_JSON="$(python3 -c 'import importlib, os
-try:
-  m = importlib.import_module(\"gradio_client\")
-  p = os.path.join(os.path.dirname(m.__file__), \"types.json\")
-  print(p if os.path.exists(p) else \"\")
-except Exception:
-  print(\"\")')"
-          echo "TYPES_JSON=${TYPES_JSON}" >> $GITHUB_ENV
-          echo "Found types.json at: ${TYPES_JSON}"
-
-      - name: Build with PyInstaller (collect data & include types.json if found)
-        shell: bash
-        run: |
-          source venv/bin/activate
-
-          # Список collect-опций (дополняй при необходимости)
-          COLLECT_ARGS="--collect-all gradio --collect-all gradio_client --collect-all safehttpx --collect-all groovy --collect-all flask"
-
-          if [ -n "${TYPES_JSON}" ]; then
-            echo "Including explicit types.json: ${TYPES_JSON}"
-            # Для macOS-разделитель в --add-data = ':'
-            pyinstaller --onefile --name MyApp $COLLECT_ARGS --add-data "${TYPES_JSON}:gradio_client" app.py
-          else
-            echo "types.json not found; proceeding without explicit add-data"
-            pyinstaller --onefile --name MyApp $COLLECT_ARGS app.py
-          fi
+          # Если у вас другое имя файла-старта, замените app.py ниже
+          pyinstaller --onefile --name MyApp \
+            --collect-all gradio \
+            --collect-all gradio_client \
+            --collect-all safehttpx \
+            --collect-all groovy \
+            --collect-all flask \
+            --collect-all openpyxl \
+            app.py
 
       - name: Show dist contents
         shell: bash
         run: |
-          echo "dist content:"
+          echo "dist listing:"
           ls -la dist || true
 
-      - name: Archive and upload artifact
+      - name: Archive dist and upload artifact
         shell: bash
         run: |
           mkdir -p release
           cd dist || exit 0
           zip -r ../release/MyApp-macos.zip . || true
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
