@@ -22,11 +22,10 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-- name: Build app
-  run: |
-    source venv/bin/activate
-    pyinstaller --onefile --collect-all gradio_client --collect-all gradio --collect-all gradio_client app.py
-
+     - name: Build app
+       run: |
+         source venv/bin/activate
+         pyinstaller --onefile --collect-all gradio_client --collect-all gradio --collect-all gradio_client app.py
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
