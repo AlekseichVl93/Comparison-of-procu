@@ -1,35 +1,105 @@
-name: Build macOS App
+name: Build macOS App (PyInstaller)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
 
 jobs:
-  build:
+  build-macos:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Create venv and install dependencies
         run: |
+          python3 -m venv venv
+          source venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # Убедитесь, что в requirements.txt перечислены gradio и gradio_client и др.
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
           pip install pyinstaller
 
-     - name: Build app
-       run: |
-         source venv/bin/activate
-         pyinstaller --onefile --collect-all gradio_client --collect-all gradio --collect-all gradio_client app.py
+      - name: Locate gradio_client types.json and expose path
+        shell: bash
+        run: |
+          source venv/bin/activate
+          # попробуем получить абсолютный путь к types.json в установленном пакете
+          TYPES_JSON=$(python3 - <<'PY'
+import gradio_client, os, sys
+p = os.path.join(os.path.dirname(gradio_client.__file__), "types.json")
+# Если файла нет, print пустую строку
+print(p if os.path.exists(p) else "")
+PY
+)
+          echo "TYPES_JSON=${TYPES_JSON}" >> $GITHUB_ENV
+          echo "Found types.json at: ${TYPES_JSON}"
 
-      - name: Upload build artifact
+      - name: Build with PyInstaller (collect data & include types.json if found)
+        shell: bash
+        run: |
+          source venv/bin/activate
+          # Соберём опции для --add-data только если файл найден
+          ADD_DATA_ARG=""
+          if [ -n "${TYPES_JSON}" ]; then
+            # На macOS/Linux разделитель в --add-data = ':'
+            ADD_DATA_ARG="--add-data \"${TYPES_JSON}:gradio_client\""
+            echo "Will add data: ${TYPES_JSON} -> gradio_client"
+          else
+            echo "types.json not found — proceeding without explicit --add-data"
+          fi
+
+          # Собираем команду (в кавычки, затем eval)
+          CMD="pyinstaller --onefile --name MyApp \
+            --collect-all gradio \
+            --collect-all gradio_client \
+            --collect-all gradio_client \
+            --collect-all gradio_client \
+            --collect-all gradio_client \
+            --collect-all safehttpx \
+            --collect-all groovy \
+            --collect-all flask \
+            app.py"
+
+          # Если нужно добавить конкретный файл types.json, добавим аргумент
+          if [ -n "$ADD_DATA_ARG" ]; then
+            CMD="pyinstaller --onefile --name MyApp \
+              --collect-all gradio \
+              --collect-all gradio_client \
+              --collect-all safehttpx \
+              --collect-all groovy \
+              --collect-all flask \
+              ${ADD_DATA_ARG} \
+              app.py"
+          fi
+
+          echo "Running: $CMD"
+          # Выполняем команду
+          eval $CMD
+
+      - name: Show dist contents
+        run: |
+          echo "dist content:"
+          ls -la dist || true
+
+      - name: Archive and upload artifact
+        run: |
+          mkdir -p release
+          # если PyInstaller создал MyApp (одиночный бинарник) или MyApp.app, упакуем всё из dist
+          cd dist || exit 0
+          zip -r ../release/MyApp-macos.zip . || true
+        shell: bash
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macOS-app
-          path: dist/
-
+          name: MyApp-macos
+          path: release/MyApp-macos.zip
