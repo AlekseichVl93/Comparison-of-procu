@@ -22,21 +22,18 @@ jobs:
           python3 -m venv venv
           source venv/bin/activate
           python -m pip install --upgrade pip
-          # Убедитесь, что в requirements.txt перечислены gradio и gradio_client и др.
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
           pip install pyinstaller
 
       - name: Locate gradio_client types.json and expose path
-        shell: bash
         run: |
           source venv/bin/activate
-          # попробуем получить абсолютный путь к types.json в установленном пакете
+          # Найдём путь к types.json в установленном пакете gradio_client (если он есть)
           TYPES_JSON=$(python3 - <<'PY'
-import gradio_client, os, sys
+import gradio_client, os
 p = os.path.join(os.path.dirname(gradio_client.__file__), "types.json")
-# Если файла нет, print пустую строку
 print(p if os.path.exists(p) else "")
 PY
 )
@@ -47,43 +44,23 @@ PY
         shell: bash
         run: |
           source venv/bin/activate
-          # Соберём опции для --add-data только если файл найден
+
+          # По умолчанию добавляем collect-all для ключевых пакетов
+          COLLECT_ARGS="--collect-all gradio --collect-all gradio_client --collect-all safehttpx --collect-all groovy --collect-all flask"
+
           ADD_DATA_ARG=""
           if [ -n "${TYPES_JSON}" ]; then
-            # На macOS/Linux разделитель в --add-data = ':'
+            echo "Will add explicit types.json: ${TYPES_JSON}"
+            # Для macOS/Unix разделитель в --add-data = ':'
             ADD_DATA_ARG="--add-data \"${TYPES_JSON}:gradio_client\""
-            echo "Will add data: ${TYPES_JSON} -> gradio_client"
-          else
-            echo "types.json not found — proceeding without explicit --add-data"
           fi
 
-          # Собираем команду (в кавычки, затем eval)
-          CMD="pyinstaller --onefile --name MyApp \
-            --collect-all gradio \
-            --collect-all gradio_client \
-            --collect-all gradio_client \
-            --collect-all gradio_client \
-            --collect-all gradio_client \
-            --collect-all safehttpx \
-            --collect-all groovy \
-            --collect-all flask \
-            app.py"
-
-          # Если нужно добавить конкретный файл types.json, добавим аргумент
+          # Сформируем команду
           if [ -n "$ADD_DATA_ARG" ]; then
-            CMD="pyinstaller --onefile --name MyApp \
-              --collect-all gradio \
-              --collect-all gradio_client \
-              --collect-all safehttpx \
-              --collect-all groovy \
-              --collect-all flask \
-              ${ADD_DATA_ARG} \
-              app.py"
+            eval pyinstaller --onefile --name MyApp $COLLECT_ARGS $ADD_DATA_ARG app.py
+          else
+            eval pyinstaller --onefile --name MyApp $COLLECT_ARGS app.py
           fi
-
-          echo "Running: $CMD"
-          # Выполняем команду
-          eval $CMD
 
       - name: Show dist contents
         run: |
@@ -93,7 +70,6 @@ PY
       - name: Archive and upload artifact
         run: |
           mkdir -p release
-          # если PyInstaller создал MyApp (одиночный бинарник) или MyApp.app, упакуем всё из dist
           cd dist || exit 0
           zip -r ../release/MyApp-macos.zip . || true
         shell: bash
