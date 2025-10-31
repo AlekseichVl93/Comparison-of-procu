@@ -32,14 +32,14 @@ jobs:
         shell: bash
         run: |
           source venv/bin/activate
-          # Находим абсолютный путь к types.json (если файл существует)
-          TYPES_JSON=$(python3 -c "import importlib, os, sys
+          # Однострочный вызов python, результат в переменной TYPES_JSON
+          TYPES_JSON="$(python3 -c 'import importlib, os
 try:
-  m = importlib.import_module('gradio_client')
-  p = os.path.join(os.path.dirname(m.__file__), 'types.json')
-  print(p if os.path.exists(p) else '')
+  m = importlib.import_module(\"gradio_client\")
+  p = os.path.join(os.path.dirname(m.__file__), \"types.json\")
+  print(p if os.path.exists(p) else \"\")
 except Exception:
-  print('')")
+  print(\"\")')"
           echo "TYPES_JSON=${TYPES_JSON}" >> $GITHUB_ENV
           echo "Found types.json at: ${TYPES_JSON}"
 
@@ -48,11 +48,12 @@ except Exception:
         run: |
           source venv/bin/activate
 
+          # Список collect-опций (дополняй при необходимости)
           COLLECT_ARGS="--collect-all gradio --collect-all gradio_client --collect-all safehttpx --collect-all groovy --collect-all flask"
 
           if [ -n "${TYPES_JSON}" ]; then
             echo "Including explicit types.json: ${TYPES_JSON}"
-            # для macOS/Linux разделитель в --add-data = ':'
+            # Для macOS-разделитель в --add-data = ':'
             pyinstaller --onefile --name MyApp $COLLECT_ARGS --add-data "${TYPES_JSON}:gradio_client" app.py
           else
             echo "types.json not found; proceeding without explicit add-data"
